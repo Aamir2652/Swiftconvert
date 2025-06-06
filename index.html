@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SwiftConvert | Simple File Conversion</title>
+    <style>
+        :root {
+            --primary: #5e72e4;
+            --primary-hover: #324cdd;
+            --border: #ddd;
+            --bg: #f9f9f9;
+            --toast-bg: #333;
+            --toast-color: #fff;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            margin: 0; padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        h1 {
+            color: var(--primary);
+            margin: 1rem 0;
+        }
+        #dropZone {
+            border: 2px dashed var(--primary);
+            border-radius: 8px;
+            width: 90vw;
+            max-width: 480px;
+            height: 180px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            background: white;
+            transition: background 0.3s ease;
+        }
+        #dropZone.active {
+            background: #e0e7ff;
+        }
+        #dropZone h3 {
+            margin: 0;
+            font-weight: 600;
+            color: var(--primary);
+        }
+        #dropZone p {
+            margin: 0.3rem 0 0;
+            color: #666;
+            font-size: 0.9rem;
+        }
+        #fileInput {
+            display: none;
+        }
+        #selectFilesBtn, #convertBtn, #newFileBtn {
+            margin: 1rem 0.5rem;
+            padding: 0.7rem 1.5rem;
+            border: none;
+            background: var(--primary);
+            color: white;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+        #selectFilesBtn:hover, #convertBtn:hover, #newFileBtn:hover {
+            background: var(--primary-hover);
+        }
+        #convertBtn:disabled {
+            background: #aaa;
+            cursor: not-allowed;
+        }
+        #formatSelect {
+            padding: 0.5rem;
+            font-size: 1rem;
+            border-radius: 5px;
+            border: 1px solid var(--border);
+            margin-left: 0.5rem;
+        }
+        #progressContainer {
+            width: 90vw;
+            max-width: 480px;
+            margin: 0.5rem 0;
+            background: #ddd;
+            border-radius: 6px;
+            height: 20px;
+            display: none;
+        }
+        #progressBar {
+            background: var(--primary);
+            height: 100%;
+            width: 0%;
+            border-radius: 6px;
+            transition: width 0.3s ease;
+        }
+        #progressText {
+            margin: 0.3rem 0 0 0;
+            font-size: 0.9rem;
+            color: #444;
+        }
+        #filePreview {
+            width: 90vw;
+            max-width: 480px;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.8rem;
+            margin-top: 1rem;
+            display: none;
+        }
+        #fileList {
+            list-style: none;
+            margin: 0; padding: 0;
+            max-height: 180px;
+            overflow-y: auto;
+        }
+        #toast {
+            position: fixed;
+            bottom: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--toast-bg);
+            color: var(--toast-color);
+            padding: 0.8rem 1.2rem;
+            border-radius: 20px;
+            display: none;
+            font-weight: 600;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+            z-index: 9999;
+        }
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid white;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <h1>SwiftConvert</h1>
+
+    <div id="dropZone">
+        <h3>Drag & Drop Files Here</h3>
+        <p>or</p>
+        <button id="selectFilesBtn">Select Files</button>
+        <input type="file" id="fileInput" />
+    </div>
+
+    <div style="margin-top: 1rem;">
+        <label for="formatSelect">Convert To:</label>
+        <select id="formatSelect" aria-label="Select output format">
+            <option value="pdf">PDF</option>
+            <option value="jpg">JPG</option>
+            <option value="png">PNG</option>
+        </select>
+        <button id="convertBtn" disabled>Convert</button>
+        <button id="newFileBtn">New File</button>
+    </div>
+
+    <div id="progressContainer" aria-live="polite" aria-atomic="true">
+        <div id="progressBar"></div>
+        <div id="progressText"></div>
+    </div>
+
+    <div id="filePreview" aria-live="polite" aria-atomic="true">
+        <ul id="fileList"></ul>
+    </div>
+
+    <div id="toast" role="alert" aria-live="assertive"></div>
+
+<script>
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const selectFilesBtn = document.getElementById('selectFilesBtn');
+    const convertBtn = document.getElementById('convertBtn');
+    const formatSelect = document.getElementById('formatSelect');
+    const progressContainer = document.getElementById('progressContainer');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    const resultContainer = document.getElementById('resultContainer');
+    const newFileBtn = document.getElementById('newFileBtn');
+    const filePreview = document.getElementById('filePreview');
+    const fileList = document.getElementById('fileList');
+    const toast = document.getElementById('toast');
+    
+    selectFilesBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', handleFiles);
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('active');
+    });
+    ['dragleave', 'dragend'].forEach(type => {
+        dropZone.addEventListener(type, () => {
+            dropZone.classList.remove('active');
+        });
+    });
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('active');
+        if (e.dataTransfer.files.length) {
+            fileInput.files = e.dataTransfer.files;
+            handleFiles();
+            showToast(`${e.dataTransfer.files.length} file(s) added`);
+        }
+    });
+    convertBtn.addEventListener('click', startConversion);
+    newFileBtn.addEventListener('click', resetConverter);
+    formatSelect.addEventListener('change', () => {
+        if (fileInput.files.length > 0) {
+            dropZone.querySelector('p').textContent = \`Ready to convert to \${formatSelect.options[formatSelect.selectedIndex].text}\`;
+        }
+    });
+
+    function handleFiles() {
+        if (fileInput.files.length > 0) {
+            convertBtn.disabled = false;
+            filePreview.style.display = 'block';
+            fileList.innerHTML = '';
+            
+            Array.from(fileInput.files).forEach(file => {
+                const li = document.createElement('li');
+                li.style.padding = '0.5rem';
+                li.style.borderBottom = '1px solid var(--border)';
+                li.textContent = \`\${file.name} (\${formatFileSize(file.size)})\`;
+                fileList.appendChild(li);
+            });
+            
+            dropZone.querySelector('h3').textContent = \`\${fileInput.files.length} file(s) selected\`;
+            dropZone.querySelector('p').textContent = \`Ready to convert to \${formatSelect.options[formatSelect.selectedIndex].text}\`;
+        }
+    }
+    
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+    
+    async function startConversion() {
+        if (fileInput.files.length === 0) return;
+    
+        convertBtn.disabled = true;
+        convertBtn.innerHTML = '<span class="loader"></span><span class="btn-text">Processing...</span>';
+        progressContainer.style.display = 'block';
+        progressBar.style.width = '0%';
+        progressText.textContent = 'Uploading files...';
+    
+        const file = fileInput.files[0];
+        const format = formatSelect.value;
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('format', format);
+    
+        try {
+            const response = await fetch('http://localhost:3000/convert', {
+                method: 'POST',
+                body: formData,
+            });
+    
+            if (!response.ok) throw new Error('Conversion failed');
+    
+            const blob = await response.blob();
+            progressBar.style.width = '100%';
+            progressText.textContent = 'Conversion complete!';
+    
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const originalName = file.name.split('.').slice(0, -1).join('.');
+            a.href = url;
+            a.download = \`\${originalName}_converted.\${format}\`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+    
+            showToast('Download started!');
+            convertBtn.innerHTML = '<span class="btn-text">Convert</span>';
+        } catch (err) {
+            console.error(err);
+            showToast('Conversion failed, try again.');
+            convertBtn.innerHTML = '<span class="btn-text">Convert</span>';
+        } finally {
+            convertBtn.disabled = false;
+        }
+    }
+    
+    function resetConverter() {
+        fileInput.value = '';
+        convertBtn.disabled = true;
+        progressContainer.style.display = 'none';
+        filePreview.style.display = 'none';
+        progressBar.style.width = '0%';
+        
+        dropZone.querySelector('h3').textContent = 'Drag & Drop Files Here';
+        dropZone.querySelector('p').textContent = 'or';
+    }
+    
+    function showToast(message) {
+        toast.textContent = message;
+        toast.style.display = 'block';
+        setTimeout(() => {
+            toast.style.display = 'none';
+        }, 3000);
+    }
+</script>
+
+</body>
+</html>
